@@ -1,0 +1,13 @@
+# Compiled binaries
+/bin/
+*.exe
+
+# Environment variables (never commit secrets!)
+.env
+
+# Test coverage
+coverage.out
+coverage.html
+
+# air (hot-reload) build artifacts
+/tmp/

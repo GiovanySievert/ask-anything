@@ -1,0 +1,16 @@
+# Config for air (https://github.com/air-verse/air): rebuilds and restarts the
+# API on file changes. This is the Go equivalent of nodemon.
+# Install: go install github.com/air-verse/air@latest
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/api ./cmd/api"
+bin = "./tmp/api"
+include_ext = ["go"]
+exclude_dir = ["tmp", "bin", "db"]
+delay = 500
+
+[misc]
+clean_on_exit = true
