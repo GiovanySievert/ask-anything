@@ -8,12 +8,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	pgvector "github.com/pgvector/pgvector-go"
 )
 
-type User struct {
+type Chunk struct {
+	ID         uuid.UUID       `json:"id"`
+	DocumentID uuid.UUID       `json:"document_id"`
+	Content    string          `json:"content"`
+	Embedding  pgvector.Vector `json:"embedding"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
+
+type Document struct {
 	ID        uuid.UUID `json:"id"`
-	Email     string    `json:"email"`
-	Name      string    `json:"name"`
+	Title     string    `json:"title"`
 	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
 }

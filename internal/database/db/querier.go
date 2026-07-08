@@ -11,12 +11,11 @@ import (
 )
 
 type Querier interface {
-	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
-	DeleteUser(ctx context.Context, id uuid.UUID) error
-	GetUser(ctx context.Context, id uuid.UUID) (User, error)
-	GetUserByEmail(ctx context.Context, email string) (User, error)
-	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
-	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
+	CreateChunk(ctx context.Context, arg CreateChunkParams) (Chunk, error)
+	CreateDocument(ctx context.Context, title string) (Document, error)
+	GetDocument(ctx context.Context, id uuid.UUID) (Document, error)
+	ListDocuments(ctx context.Context, arg ListDocumentsParams) ([]Document, error)
+	SearchSimilarChunks(ctx context.Context, arg SearchSimilarChunksParams) ([]SearchSimilarChunksRow, error)
 }
 
 var _ Querier = (*Queries)(nil)
