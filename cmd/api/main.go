@@ -11,6 +11,8 @@ import (
 
 	"github.com/giovanysievert/ask-anything/internal/config"
 	"github.com/giovanysievert/ask-anything/internal/database"
+	"github.com/giovanysievert/ask-anything/internal/embedding"
+	"github.com/giovanysievert/ask-anything/internal/llm"
 	"github.com/giovanysievert/ask-anything/internal/server"
 )
 
@@ -31,7 +33,6 @@ func run() error {
 
 	logger := newLogger(cfg.Env)
 
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -42,7 +43,10 @@ func run() error {
 	defer db.Close()
 	logger.Info("connected to database")
 
-	srv := server.New(cfg, db, logger)
+	llmClient := llm.New(cfg.AnthropicAPIKey, cfg.LLMModel)
+	embedClient := embedding.New(cfg.OllamaURL, cfg.EmbeddingModel)
+
+	srv := server.New(cfg, db, logger, llmClient, embedClient)
 	return srv.Start(ctx)
 }
 

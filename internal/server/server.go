@@ -9,6 +9,8 @@ import (
 
 	"github.com/giovanysievert/ask-anything/internal/config"
 	"github.com/giovanysievert/ask-anything/internal/database"
+	"github.com/giovanysievert/ask-anything/internal/embedding"
+	"github.com/giovanysievert/ask-anything/internal/llm"
 )
 
 type Server struct {
@@ -16,8 +18,8 @@ type Server struct {
 	logger     *slog.Logger
 }
 
-func New(cfg *config.Config, db *database.DB, logger *slog.Logger) *Server {
-	handler := newRouter(logger, db)
+func New(cfg *config.Config, db *database.DB, logger *slog.Logger, llmClient *llm.Client, embedClient *embedding.Client) *Server {
+	handler := newRouter(logger, db, llmClient, embedClient)
 
 	return &Server{
 		logger: logger,
@@ -27,7 +29,7 @@ func New(cfg *config.Config, db *database.DB, logger *slog.Logger) *Server {
 
 			ReadTimeout:       10 * time.Second,
 			ReadHeaderTimeout: 5 * time.Second,
-			WriteTimeout:      15 * time.Second,
+			WriteTimeout:      90 * time.Second,
 			IdleTimeout:       60 * time.Second,
 		},
 	}
