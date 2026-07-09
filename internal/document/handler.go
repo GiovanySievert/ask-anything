@@ -27,13 +27,27 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	})
 }
 
-type createRequest struct {
-	Title   string `json:"title" validate:"required,min=1,max=255"`
-	Content string `json:"content" validate:"required,min=1"`
+// CreateRequest is the body for POST /documents.
+type CreateRequest struct {
+	Title   string `json:"title" validate:"required,min=1,max=255" example:"React Native FlatList"`
+	Content string `json:"content" validate:"required,min=1" example:"FlatList renders large lists efficiently. Use getItemLayout, keyExtractor, windowSize..."`
 }
 
+// create godoc
+//
+//	@Summary		Ingest a document
+//	@Description	Chunks the content, embeds each chunk locally via Ollama, and stores the vectors for retrieval.
+//	@Tags			documents
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		CreateRequest	true	"Title and content"
+//	@Success		201		{object}	Document
+//	@Failure		400		{object}	httputil.ErrorResponse
+//	@Failure		422		{object}	httputil.ErrorResponse
+//	@Failure		500		{object}	httputil.ErrorResponse
+//	@Router			/documents [post]
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	var req createRequest
+	var req CreateRequest
 	if err := httputil.ReadJSON(w, r, &req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -51,6 +65,16 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusCreated, doc)
 }
 
+// list godoc
+//
+//	@Summary		List ingested documents
+//	@Tags			documents
+//	@Produce		json
+//	@Param			limit	query		int	false	"Max documents to return (default 20, max 100)"
+//	@Param			offset	query		int	false	"Number of documents to skip"
+//	@Success		200		{array}		Document
+//	@Failure		500		{object}	httputil.ErrorResponse
+//	@Router			/documents [get]
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	limit := parseIntQuery(r, "limit", 0)
 	offset := parseIntQuery(r, "offset", 0)

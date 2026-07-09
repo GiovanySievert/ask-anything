@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 
 	"github.com/giovanysievert/ask-anything/internal/database"
 	"github.com/giovanysievert/ask-anything/internal/document"
@@ -26,6 +27,7 @@ func newRouter(logger *slog.Logger, db *database.DB, llmClient *llm.Client, embe
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Get("/healthz", healthHandler(db))
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	documentHandler := document.NewHandler(document.NewService(document.NewRepository(db.Pool), embedClient))
 	interviewHandler := interview.NewHandler(interview.NewService(interview.NewRepository(db.Queries), embedClient, llmClient))

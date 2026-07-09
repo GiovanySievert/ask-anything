@@ -24,18 +24,33 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/answers", h.evaluateAnswer)
 }
 
-type questionRequest struct {
-	Topic string `json:"topic" validate:"required,min=1,max=255"`
-	Level string `json:"level" validate:"required,min=1,max=50"`
+// QuestionRequest is the body for POST /questions.
+type QuestionRequest struct {
+	Topic string `json:"topic" validate:"required,min=1,max=255" example:"react native flatlist"`
+	Level string `json:"level" validate:"required,min=1,max=50" example:"senior"`
 }
 
-type answerRequest struct {
-	Question string `json:"question" validate:"required,min=1"`
-	Answer   string `json:"answer" validate:"required,min=1"`
+// AnswerRequest is the body for POST /answers.
+type AnswerRequest struct {
+	Question string `json:"question" validate:"required,min=1" example:"How would you optimize a slow FlatList?"`
+	Answer   string `json:"answer" validate:"required,min=1" example:"Use getItemLayout, memoize renderItem, switch to FlashList."`
 }
 
+// generateQuestion godoc
+//
+//	@Summary		Generate an interview question (RAG)
+//	@Description	Embeds the topic, finds the most similar ingested chunks, and asks Claude for one question grounded in them.
+//	@Tags			interview
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		QuestionRequest	true	"Topic and level"
+//	@Success		200		{object}	Question
+//	@Failure		400		{object}	httputil.ErrorResponse
+//	@Failure		422		{object}	httputil.ErrorResponse
+//	@Failure		500		{object}	httputil.ErrorResponse
+//	@Router			/questions [post]
 func (h *Handler) generateQuestion(w http.ResponseWriter, r *http.Request) {
-	var req questionRequest
+	var req QuestionRequest
 	if err := httputil.ReadJSON(w, r, &req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -53,8 +68,21 @@ func (h *Handler) generateQuestion(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, question)
 }
 
+// evaluateAnswer godoc
+//
+//	@Summary		Evaluate a candidate's answer
+//	@Description	Asks Claude to score the answer and return structured feedback plus a follow-up question.
+//	@Tags			interview
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		AnswerRequest	true	"Question and the candidate's answer"
+//	@Success		200		{object}	Evaluation
+//	@Failure		400		{object}	httputil.ErrorResponse
+//	@Failure		422		{object}	httputil.ErrorResponse
+//	@Failure		500		{object}	httputil.ErrorResponse
+//	@Router			/answers [post]
 func (h *Handler) evaluateAnswer(w http.ResponseWriter, r *http.Request) {
-	var req answerRequest
+	var req AnswerRequest
 	if err := httputil.ReadJSON(w, r, &req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, err.Error())
 		return

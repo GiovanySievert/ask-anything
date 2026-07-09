@@ -11,3 +11,6 @@ coverage.html
 
 # air (hot-reload) build artifacts
 /tmp/
+
+
+/docs-rags

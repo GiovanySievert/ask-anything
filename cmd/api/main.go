@@ -14,8 +14,14 @@ import (
 	"github.com/giovanysievert/ask-anything/internal/embedding"
 	"github.com/giovanysievert/ask-anything/internal/llm"
 	"github.com/giovanysievert/ask-anything/internal/server"
+
+	_ "github.com/giovanysievert/ask-anything/docs"
 )
 
+// @title           ask-anything API
+// @version         1.0
+// @description     AI-powered technical-interview API. Ingest documents, then generate RAG-grounded interview questions and evaluate candidate answers.
+// @BasePath        /api/v1
 func main() {
 	if err := run(); err != nil {
 		slog.Error("fatal error", slog.Any("err", err))

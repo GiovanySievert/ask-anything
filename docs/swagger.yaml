@@ -1,0 +1,232 @@
+basePath: /api/v1
+definitions:
+  github_com_giovanysievert_ask-anything_internal_httputil.ErrorBody:
+    properties:
+      fields:
+        additionalProperties:
+          type: string
+        type: object
+      message:
+        type: string
+    type: object
+  github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorBody'
+    type: object
+  internal_document.CreateRequest:
+    properties:
+      content:
+        example: FlatList renders large lists efficiently. Use getItemLayout, keyExtractor,
+          windowSize...
+        minLength: 1
+        type: string
+      title:
+        example: React Native FlatList
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - content
+    - title
+    type: object
+  internal_document.Document:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      title:
+        type: string
+    type: object
+  internal_interview.AnswerRequest:
+    properties:
+      answer:
+        example: Use getItemLayout, memoize renderItem, switch to FlashList.
+        minLength: 1
+        type: string
+      question:
+        example: How would you optimize a slow FlatList?
+        minLength: 1
+        type: string
+    required:
+    - answer
+    - question
+    type: object
+  internal_interview.Evaluation:
+    properties:
+      feedback:
+        type: string
+      missing_points:
+        items:
+          type: string
+        type: array
+      next_question:
+        type: string
+      score:
+        type: integer
+      weak_topics:
+        items:
+          type: string
+        type: array
+    type: object
+  internal_interview.Question:
+    properties:
+      question:
+        type: string
+    type: object
+  internal_interview.QuestionRequest:
+    properties:
+      level:
+        example: senior
+        maxLength: 50
+        minLength: 1
+        type: string
+      topic:
+        example: react native flatlist
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - level
+    - topic
+    type: object
+info:
+  contact: {}
+  description: AI-powered technical-interview API. Ingest documents, then generate
+    RAG-grounded interview questions and evaluate candidate answers.
+  title: ask-anything API
+  version: "1.0"
+paths:
+  /answers:
+    post:
+      consumes:
+      - application/json
+      description: Asks Claude to score the answer and return structured feedback
+        plus a follow-up question.
+      parameters:
+      - description: Question and the candidate's answer
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_interview.AnswerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_interview.Evaluation'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse'
+      summary: Evaluate a candidate's answer
+      tags:
+      - interview
+  /documents:
+    get:
+      parameters:
+      - description: Max documents to return (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Number of documents to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_document.Document'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse'
+      summary: List ingested documents
+      tags:
+      - documents
+    post:
+      consumes:
+      - application/json
+      description: Chunks the content, embeds each chunk locally via Ollama, and stores
+        the vectors for retrieval.
+      parameters:
+      - description: Title and content
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_document.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_document.Document'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse'
+      summary: Ingest a document
+      tags:
+      - documents
+  /questions:
+    post:
+      consumes:
+      - application/json
+      description: Embeds the topic, finds the most similar ingested chunks, and asks
+        Claude for one question grounded in them.
+      parameters:
+      - description: Topic and level
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_interview.QuestionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_interview.Question'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse'
+      summary: Generate an interview question (RAG)
+      tags:
+      - interview
+swagger: "2.0"
