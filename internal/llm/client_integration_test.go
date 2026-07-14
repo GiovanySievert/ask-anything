@@ -20,25 +20,18 @@ func newClient(t *testing.T) *llm.Client {
 	return llm.New(key, "claude-haiku-4-5")
 }
 
-func TestGenerateQuestion(t *testing.T) {
+func TestStreamChat(t *testing.T) {
 	client := newClient(t)
 
-	question, err := client.GenerateQuestion(context.Background(), "react native", "senior", nil)
+	var deltas int
+	history := []llm.ChatMessage{
+		{Role: "user", Content: "Reply with exactly the word: pong"},
+	}
+	full, err := client.StreamChat(context.Background(), history, nil, func(string) error {
+		deltas++
+		return nil
+	})
 	require.NoError(t, err)
-	require.NotEmpty(t, question)
-}
-
-func TestEvaluateAnswer(t *testing.T) {
-	client := newClient(t)
-
-	eval, err := client.EvaluateAnswer(
-		context.Background(),
-		"How would you optimize a slow FlatList in React Native?",
-		"I would use getItemLayout, keyExtractor, and windowSize tuning, plus memoized row components.",
-	)
-	require.NoError(t, err)
-	require.GreaterOrEqual(t, eval.Score, 0)
-	require.LessOrEqual(t, eval.Score, 10)
-	require.NotEmpty(t, eval.Feedback)
-	require.NotEmpty(t, eval.NextQuestion)
+	require.Positive(t, deltas)
+	require.NotEmpty(t, full)
 }
