@@ -20,7 +20,7 @@ import (
 
 // @title           ask-anything API
 // @version         1.0
-// @description     AI-powered technical-interview API. Ingest documents, then generate RAG-grounded interview questions and evaluate candidate answers.
+// @description     AI-powered chat API. Ingest documents, then hold multi-turn conversations whose answers are grounded in the ingested material (RAG) and streamed back over Server-Sent Events.
 // @BasePath        /api/v1
 func main() {
 	if err := run(); err != nil {
