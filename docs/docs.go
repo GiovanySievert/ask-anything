@@ -15,9 +15,36 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/answers": {
+        "/conversations": {
+            "get": {
+                "description": "Returns conversations ordered by most recently updated.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "List conversations",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_chat.Conversation"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "post": {
-                "description": "Asks Claude to score the answer and return structured feedback plus a follow-up question.",
+                "description": "Starts a new chat conversation.",
                 "consumes": [
                     "application/json"
                 ],
@@ -25,25 +52,24 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "interview"
+                    "chat"
                 ],
-                "summary": "Evaluate a candidate's answer",
+                "summary": "Create a conversation",
                 "parameters": [
                     {
-                        "description": "Question and the candidate's answer",
+                        "description": "Optional title",
                         "name": "request",
                         "in": "body",
-                        "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_interview.AnswerRequest"
+                            "$ref": "#/definitions/internal_chat.CreateConversationRequest"
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_interview.Evaluation"
+                            "$ref": "#/definitions/internal_chat.Conversation"
                         }
                     },
                     "400": {
@@ -60,6 +86,113 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversations/{id}/messages": {
+            "get": {
+                "description": "Returns the full message history of a conversation, oldest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "List messages in a conversation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_chat.Message"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Appends the user message, retrieves grounding chunks (RAG), and streams the assistant reply as Server-Sent Events. Emits ` + "`" + `event: delta` + "`" + ` frames with a JSON ` + "`" + `{\"text\":\"...\"}` + "`" + ` payload, a terminal ` + "`" + `event: done` + "`" + ` frame carrying the persisted assistant message, and ` + "`" + `event: error` + "`" + ` on failure.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Send a message and stream the reply (SSE)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "User message",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_chat.MessageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse"
                         }
@@ -158,58 +291,6 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/questions": {
-            "post": {
-                "description": "Embeds the topic, finds the most similar ingested chunks, and asks Claude for one question grounded in them.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "interview"
-                ],
-                "summary": "Generate an interview question (RAG)",
-                "parameters": [
-                    {
-                        "description": "Topic and level",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_interview.QuestionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_interview.Question"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Unprocessable Entity",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorResponse"
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -232,6 +313,66 @@ const docTemplate = `{
             "properties": {
                 "error": {
                     "$ref": "#/definitions/github_com_giovanysievert_ask-anything_internal_httputil.ErrorBody"
+                }
+            }
+        },
+        "internal_chat.Conversation": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_chat.CreateConversationRequest": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "example": "React Native study"
+                }
+            }
+        },
+        "internal_chat.Message": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "conversation_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_chat.MessageRequest": {
+            "type": "object",
+            "required": [
+                "content"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "minLength": 1,
+                    "example": "How do I optimize a slow FlatList?"
                 }
             }
         },
@@ -268,80 +409,6 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
-        },
-        "internal_interview.AnswerRequest": {
-            "type": "object",
-            "required": [
-                "answer",
-                "question"
-            ],
-            "properties": {
-                "answer": {
-                    "type": "string",
-                    "minLength": 1,
-                    "example": "Use getItemLayout, memoize renderItem, switch to FlashList."
-                },
-                "question": {
-                    "type": "string",
-                    "minLength": 1,
-                    "example": "How would you optimize a slow FlatList?"
-                }
-            }
-        },
-        "internal_interview.Evaluation": {
-            "type": "object",
-            "properties": {
-                "feedback": {
-                    "type": "string"
-                },
-                "missing_points": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "next_question": {
-                    "type": "string"
-                },
-                "score": {
-                    "type": "integer"
-                },
-                "weak_topics": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "internal_interview.Question": {
-            "type": "object",
-            "properties": {
-                "question": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_interview.QuestionRequest": {
-            "type": "object",
-            "required": [
-                "level",
-                "topic"
-            ],
-            "properties": {
-                "level": {
-                    "type": "string",
-                    "maxLength": 50,
-                    "minLength": 1,
-                    "example": "senior"
-                },
-                "topic": {
-                    "type": "string",
-                    "maxLength": 255,
-                    "minLength": 1,
-                    "example": "react native flatlist"
-                }
-            }
         }
     }
 }`
@@ -353,7 +420,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "ask-anything API",
-	Description:      "AI-powered technical-interview API. Ingest documents, then generate RAG-grounded interview questions and evaluate candidate answers.",
+	Description:      "AI-powered chat API. Ingest documents, then hold multi-turn conversations whose answers are grounded in the ingested material (RAG) and streamed back over Server-Sent Events.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",
