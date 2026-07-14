@@ -1,11 +1,12 @@
 # ask-anything
 
-An AI-powered technical-interview API in Go. Ingest technical documents, then
-generate interview questions grounded in that material (RAG) and evaluate
-candidate answers — all with structured JSON output.
+An AI-powered chat API in Go. Ingest technical documents, then hold multi-turn
+conversations whose answers are grounded in that material (RAG) and streamed back
+token by token over Server-Sent Events.
 
-The pipeline: **ingest → chunk → embed → store** (documents), then
-**embed topic → semantic search → Claude** (questions) and **Claude** (answers).
+The pipeline: **ingest → chunk → embed → store** (documents), then per message
+**embed → semantic search → Claude (streaming)** with the full conversation
+history and the retrieved chunks.
 
 ## Stack
 
@@ -15,14 +16,15 @@ The pipeline: **ingest → chunk → embed → store** (documents), then
 | Database      | PostgreSQL + [pgvector](https://github.com/pgvector/pgvector) |
 | DB access     | [pgx/v5](https://github.com/jackc/pgx) + [sqlc](https://sqlc.dev) |
 | Embeddings    | [Ollama](https://ollama.com) (`nomic-embed-text`, 768 dims) — runs locally |
-| LLM           | [Claude](https://www.anthropic.com) via the official Go SDK |
+| LLM           | [Claude](https://www.anthropic.com) via the official Go SDK (streaming) |
+| Streaming     | Server-Sent Events (`text/event-stream`)           |
 | Validation    | [validator/v10](https://github.com/go-playground/validator) |
 | Logging       | `log/slog` (structured)                            |
-| Tests         | stdlib + testify + [testcontainers](https://testcontainers.com) |
+| Tests         | stdlib + testify (`httptest` for handlers)         |
 
 **What runs where:** document text is chunked and embedded **locally** by Ollama
 — it never leaves your machine during embedding. Only the chunks the semantic
-search retrieves are sent to Claude to generate a question.
+search retrieves are sent to Claude to ground the reply.
 
 ## Prerequisites
 
@@ -73,41 +75,52 @@ curl -X POST http://localhost:8080/api/v1/documents \
   -d '{"title":"React Native FlatList","content":"FlatList renders large lists... use getItemLayout, keyExtractor, windowSize, FlashList..."}'
 ```
 
-### Interview
+### Chat
 
-| Method | Path         | Body                    | Success | Response                       |
-| ------ | ------------ | ----------------------- | ------- | ------------------------------ |
-| POST   | `/questions` | `{"topic","level"}`     | 200     | `{"question"}`                 |
-| POST   | `/answers`   | `{"question","answer"}` | 200     | `{"score","feedback","missing_points","weak_topics","next_question"}` |
+| Method | Path                            | Body           | Success | Response                                  |
+| ------ | ------------------------------- | -------------- | ------- | ----------------------------------------- |
+| POST   | `/conversations`                | `{"title?"}`   | 201     | The created conversation                  |
+| GET    | `/conversations`                | —              | 200     | Conversations, most recently updated first |
+| GET    | `/conversations/{id}/messages`  | —              | 200     | The full message history (oldest first)   |
+| POST   | `/conversations/{id}/messages`  | `{"content"}`  | 200     | **SSE stream** of the assistant reply     |
 
 ```bash
-# Generate a question (RAG: embeds the topic, finds similar chunks, asks Claude)
-curl -X POST http://localhost:8080/api/v1/questions \
-  -H "Content-Type: application/json" \
-  -d '{"topic":"react native flatlist","level":"senior"}'
+# 1. Start a conversation
+CONV=$(curl -sX POST http://localhost:8080/api/v1/conversations \
+  -d '{"title":"react native"}' | jq -r .id)
 
-# Evaluate an answer
-curl -X POST http://localhost:8080/api/v1/answers \
+# 2. Send a message and stream the reply (RAG runs on every turn)
+curl -N -X POST "http://localhost:8080/api/v1/conversations/$CONV/messages" \
   -H "Content-Type: application/json" \
-  -d '{"question":"How would you optimize a slow FlatList?","answer":"Use getItemLayout, memoize renderItem, switch to FlashList for huge lists."}'
+  -d '{"content":"How would you optimize a slow FlatList?"}'
+
+# 3. Read the persisted history
+curl -s "http://localhost:8080/api/v1/conversations/$CONV/messages"
 ```
 
-Sample `/answers` response:
+The `POST /conversations/{id}/messages` response is a Server-Sent Events stream.
+It emits one `delta` event per text chunk, then a terminal `done` event carrying
+the persisted assistant message; an `error` event is emitted if generation fails:
 
-```json
-{
-  "score": 8,
-  "feedback": "Strong, practical answer covering the most impactful optimizations.",
-  "missing_points": ["removeClippedSubviews", "profiling before optimizing"],
-  "weak_topics": ["performance measurement"],
-  "next_question": "How would you determine whether the slowness is in rendering or the JS thread?"
-}
+```
+event: delta
+data: {"text":"To optimize a slow "}
+
+event: delta
+data: {"text":"FlatList, use getItemLayout..."}
+
+event: done
+data: {"id":"...","conversation_id":"...","role":"assistant","content":"...","created_at":"..."}
 ```
 
-Errors use a single envelope; validation errors add a `fields` map:
+Both the user message and the full assistant reply are persisted, so the next
+turn is sent to Claude with the whole conversation history.
+
+Errors on the JSON routes use a single envelope; validation errors add a
+`fields` map:
 
 ```json
-{ "error": { "message": "validation failed", "fields": { "Level": "failed on rule: required" } } }
+{ "error": { "message": "validation failed", "fields": { "Content": "failed on rule: required" } } }
 ```
 
 ## How RAG works here
@@ -118,18 +131,18 @@ INGESTION (POST /documents, once per doc):
                                         │
                               vectors are the search index, not sent to Claude
 
-QUESTION (POST /questions, per request):
-  "react native senior" ──Ollama──> vector
-                                       │
+CHAT (POST /conversations/{id}/messages, per turn):
+  user message ──Ollama──> vector
+                             │
       pgvector finds the nearest chunks (embedding <=> vector, cosine distance)
-                                       │
-                    Claude receives those chunks (text) + the ask
-                                       │
-                              the generated question
+                             │
+   Claude receives those chunks (as the system prompt) + the full history
+                             │
+                 the reply, streamed back over SSE
 ```
 
 The vector never reaches Claude — it's only used to find *which* chunks are
-relevant. Claude sees the retrieved chunk text plus the instruction.
+relevant. Claude sees the retrieved chunk text plus the conversation history.
 
 ## Project layout
 
@@ -140,20 +153,24 @@ internal/
   server/           # http.Server, router, middleware, graceful shutdown
   chunking/         # pure Split(text, size, overlap) function
   embedding/        # Ollama client: text -> []float32
-  llm/              # Claude client: GenerateQuestion + EvaluateAnswer
+  llm/              # Claude client: StreamChat (streaming, multi-turn)
   document/         # the documents resource (domain → repository → service → handler)
-  interview/        # the RAG resource: /questions + /answers
+  chat/             # the chat resource: conversations + messages + SSE streaming
   database/         # pgx pool + healthcheck
     db/             # sqlc-generated code (DO NOT EDIT)
   httputil/         # JSON read/write + standard error shape
 db/
-  migrations/       # *.up.sql / *.down.sql (000002 adds pgvector + documents/chunks)
+  migrations/       # *.up.sql / *.down.sql (000002 adds pgvector + documents/chunks, 000003 adds conversations/messages)
   queries/          # SQL consumed by sqlc (including the similarity search)
 ```
 
 Each feature follows the same one-way flow: `handler → service → repository`,
 with each layer depending on the next through an interface — so business logic
 is testable without a database or network calls.
+
+The chat handler splits its routes so the SSE endpoint runs without the
+request-timeout middleware (which would otherwise cancel a long stream), and
+clears the connection's write deadline via `http.NewResponseController`.
 
 ## Configuration
 
@@ -170,6 +187,15 @@ is testable without a database or network calls.
 `claude-haiku-4-5` is the default for cheap iteration. Swap `LLM_MODEL` for
 `claude-opus-4-8` when you want the strongest model.
 
+## API docs (Swagger)
+
+Interactive OpenAPI docs are served at `http://localhost:8080/swagger/` while the
+API is running. Regenerate them after changing handler annotations:
+
+```bash
+make docs          # swag init from the godoc annotations on the handlers
+```
+
 ## Testing
 
 ```bash
@@ -178,8 +204,9 @@ make test-short    # fast tests only (skips Docker/API-key-dependent tests)
 ```
 
 - `internal/chunking` — pure unit tests.
+- `internal/chat` — service unit tests (with fakes) + handler tests via `httptest`, including the SSE stream.
 - `internal/embedding` — integration tests against a running Ollama (skipped in short mode).
-- `internal/llm` — integration tests against the real Claude API (skipped unless `ANTHROPIC_API_KEY` is set).
+- `internal/llm` — `StreamChat` integration test against the real Claude API (skipped unless `ANTHROPIC_API_KEY` is set).
 
 ## Useful commands
 
@@ -201,4 +228,6 @@ docker build .     # build the production image (multi-stage, distroless)
 
 ## Next steps (not included yet)
 
-Auth/JWT, pagination, streaming responses, re-ranking, PDF upload, and CI.
+Auth/JWT, per-user conversations, auto-generated conversation titles, pagination,
+re-ranking, PDF upload, and CI.
+```

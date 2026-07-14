@@ -9,11 +9,11 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 
+	"github.com/giovanysievert/ask-anything/internal/chat"
 	"github.com/giovanysievert/ask-anything/internal/database"
 	"github.com/giovanysievert/ask-anything/internal/document"
 	"github.com/giovanysievert/ask-anything/internal/embedding"
 	"github.com/giovanysievert/ask-anything/internal/httputil"
-	"github.com/giovanysievert/ask-anything/internal/interview"
 	"github.com/giovanysievert/ask-anything/internal/llm"
 )
 
@@ -24,17 +24,22 @@ func newRouter(logger *slog.Logger, db *database.DB, llmClient *llm.Client, embe
 	r.Use(middleware.RealIP)
 	r.Use(requestLogger(logger))
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Get("/healthz", healthHandler(db))
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	documentHandler := document.NewHandler(document.NewService(document.NewRepository(db.Pool), embedClient))
-	interviewHandler := interview.NewHandler(interview.NewService(interview.NewRepository(db.Queries), embedClient, llmClient))
+	chatHandler := chat.NewHandler(chat.NewService(chat.NewRepository(db.Pool), embedClient, llmClient), logger)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		documentHandler.RegisterRoutes(r)
-		interviewHandler.RegisterRoutes(r)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Timeout(60 * time.Second))
+			documentHandler.RegisterRoutes(r)
+			chatHandler.RegisterJSONRoutes(r)
+		})
+		r.Group(func(r chi.Router) {
+			chatHandler.RegisterStreamRoutes(r)
+		})
 	})
 
 	return r

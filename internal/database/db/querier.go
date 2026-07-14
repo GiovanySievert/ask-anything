@@ -12,10 +12,16 @@ import (
 
 type Querier interface {
 	CreateChunk(ctx context.Context, arg CreateChunkParams) (Chunk, error)
+	CreateConversation(ctx context.Context, title string) (Conversation, error)
 	CreateDocument(ctx context.Context, title string) (Document, error)
+	CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error)
+	GetConversation(ctx context.Context, id uuid.UUID) (Conversation, error)
 	GetDocument(ctx context.Context, id uuid.UUID) (Document, error)
+	ListConversations(ctx context.Context, arg ListConversationsParams) ([]Conversation, error)
 	ListDocuments(ctx context.Context, arg ListDocumentsParams) ([]Document, error)
+	ListMessages(ctx context.Context, conversationID uuid.UUID) ([]Message, error)
 	SearchSimilarChunks(ctx context.Context, arg SearchSimilarChunksParams) ([]SearchSimilarChunksRow, error)
+	TouchConversation(ctx context.Context, id uuid.UUID) error
 }
 
 var _ Querier = (*Queries)(nil)
